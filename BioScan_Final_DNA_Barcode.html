@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BioScan 3D — DNA Barcode Visualizer</title>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<style>
+*{box-sizing:border-box}
+:root{
+  --bg:#030814;--panel:rgba(8,18,38,.82);--line:rgba(77,174,255,.24);
+  --text:#eef7ff;--muted:#8fa9c7;--cyan:#35c8ff;--blue:#587cff;
+  --green:#35e0a1;--pink:#c875ff;--danger:#ff6b6b
+}
+body{margin:0;background:
+radial-gradient(circle at 50% 18%,rgba(24,107,214,.28),transparent 28%),
+radial-gradient(circle at 82% 70%,rgba(144,67,255,.10),transparent 30%),
+linear-gradient(135deg,#01040b 0%,#031022 48%,#020711 100%);
+background-attachment:fixed;
+color:var(--text);font-family:Inter,system-ui,Segoe UI,Arial,sans-serif;min-height:100vh;overflow-x:hidden}
+header{height:76px;border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 28px;gap:18px;background:rgba(2,7,18,.78);backdrop-filter:blur(14px);position:sticky;top:0;z-index:10}
+.logo{font-size:28px;font-weight:800;letter-spacing:-1px}.logo span{color:var(--cyan)}
+.tag{color:var(--muted);font-size:14px;margin-left:10px}
+.layout{display:grid;grid-template-columns:250px 1fr;min-height:calc(100vh - 76px)}
+aside{border-right:1px solid var(--line);padding:22px 16px;background:rgba(2,8,20,.55)}
+.nav{display:flex;gap:12px;align-items:center;padding:13px 14px;border-radius:12px;margin-bottom:7px;color:#b7cae3;cursor:pointer}
+.nav.active,.nav:hover{background:linear-gradient(90deg,rgba(31,112,222,.45),rgba(28,68,139,.18));color:white}
+h3{font-size:12px;text-transform:uppercase;letter-spacing:1.6px;color:#6f91b5;margin:28px 12px 10px}
+.species{display:flex;align-items:center;gap:10px;padding:10px;border:1px solid transparent;border-radius:12px;cursor:pointer;margin:6px 0}
+.species:hover,.species.active{border-color:#209cff;background:rgba(20,106,190,.16)}
+.thumb{width:42px;height:42px;border-radius:10px;display:grid;place-items:center;background:linear-gradient(135deg,#10294e,#06101e);font-size:24px}
+.species b{display:block;font-size:14px}.species small{color:var(--muted);font-style:italic}
+main{padding:22px;max-width:1500px;width:100%;margin:auto}
+.topbar{display:flex;justify-content:space-between;gap:14px;align-items:center;margin-bottom:16px}
+.search{display:flex;gap:8px;flex:1;max-width:650px}
+input,select,button{font:inherit}
+input{width:100%;padding:13px 16px;border:1px solid var(--line);background:rgba(5,14,29,.8);color:white;border-radius:12px;outline:none}
+button{border:1px solid var(--line);background:rgba(10,30,57,.8);color:white;padding:11px 15px;border-radius:10px;cursor:pointer}
+button:hover{border-color:var(--cyan);box-shadow:0 0 20px rgba(53,200,255,.14)}
+.hero{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;box-shadow:0 12px 45px rgba(0,0,0,.25);overflow:hidden}
+.viewer{height:535px;position:relative;
+background:
+radial-gradient(circle at 50% 52%,rgba(36,166,255,.22),transparent 26%),
+radial-gradient(circle at 50% 52%,rgba(78,87,255,.12),transparent 45%),
+linear-gradient(180deg,rgba(2,12,29,.35),rgba(0,3,10,.75));
+overflow:hidden}
+.viewer:before{content:"";position:absolute;inset:0;pointer-events:none;
+background:
+linear-gradient(rgba(65,166,255,.045) 1px,transparent 1px),
+linear-gradient(90deg,rgba(65,166,255,.045) 1px,transparent 1px);
+background-size:34px 34px;
+mask-image:linear-gradient(to bottom,transparent 0%,black 35%,black 100%);
+}
+.viewer:after{content:"";position:absolute;left:8%;right:8%;top:-8%;height:2px;
+background:linear-gradient(90deg,transparent,#4bd7ff,transparent);
+box-shadow:0 0 22px #36c9ff;opacity:.55;animation:scanline 4s linear infinite;pointer-events:none}
+@keyframes scanline{0%{transform:translateY(0)}100%{transform:translateY(560px)}}
+#scene{width:100%;height:100%;display:block}
+.hud{position:absolute;left:18px;top:18px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:rgba(1,7,17,.68);font-size:12px;color:#b9d8f8;line-height:1.7}
+.viewerTitle{position:absolute;bottom:16px;left:0;right:0;text-align:center;pointer-events:none}
+.viewerTitle strong{font-size:20px;letter-spacing:2px;text-shadow:0 0 18px rgba(70,210,255,.8)}
+.viewerTitle small{display:block;color:#7fcfff;margin-top:4px;letter-spacing:4px;text-shadow:0 0 12px rgba(70,210,255,.65)}
+.controls{position:absolute;right:16px;top:16px;display:flex;flex-direction:column;gap:7px}
+.info{padding:22px}.info h1{margin:0 0 2px;font-size:28px}.latin{color:#8bb8df;font-style:italic;margin-bottom:14px}
+.badge{display:inline-block;padding:5px 9px;border-radius:20px;background:rgba(53,224,161,.12);border:1px solid rgba(53,224,161,.4);color:var(--green);font-size:12px}
+.rule{height:1px;background:var(--line);margin:17px 0}
+.infoRow{display:flex;justify-content:space-between;gap:15px;padding:7px 0;color:#9db5d1;font-size:13px}.infoRow span:last-child{color:#eef7ff;text-align:right}
+.grid{display:grid;grid-template-columns:1.25fr 1fr 1fr;gap:16px;margin-top:16px}
+.panel{padding:18px;min-height:300px}
+.panel h2{font-size:16px;margin:0 0 15px}.panel h2 span{color:var(--cyan)}
+.sequence{height:205px;overflow:auto;background:#020914;border:1px solid rgba(71,146,215,.16);border-radius:10px;padding:13px;font-family:ui-monospace,monospace;color:#83c9ff;font-size:12px;line-height:1.8;word-break:break-all}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:12px}.stat{padding:10px;border:1px solid var(--line);border-radius:10px}.stat small{color:var(--muted)}.stat b{display:block;margin-top:4px}
+.bar{height:8px;border-radius:10px;background:#14233a;overflow:hidden;margin-top:6px}.fill{height:100%;background:linear-gradient(90deg,var(--cyan),var(--pink))}
+.legend{display:grid;gap:11px}.legend div{display:grid;grid-template-columns:22px 1fr 48px;gap:8px;align-items:center;font-size:13px}.dot{width:12px;height:12px;border-radius:50%}
+.compare{grid-column:1/-1;padding:18px}.compareRow{display:grid;grid-template-columns:1fr 100px 1fr;align-items:center;gap:15px}.compareBox{border:1px solid var(--line);padding:14px;border-radius:12px}.vs{text-align:center;font-weight:800;color:var(--cyan)}
+footer{color:#637d9c;text-align:center;padding:22px;font-size:12px}
+@media(max-width:1000px){.layout{grid-template-columns:1fr}aside{display:none}.hero{grid-template-columns:1fr}.grid{grid-template-columns:1fr}.viewer{height:460px}}
+@media(max-width:600px){main{padding:12px}.viewer{height:390px}.topbar{flex-direction:column;align-items:stretch}.tag{display:none}.compareRow{grid-template-columns:1fr}.vs{padding:4px}}
+
+.holo-scan{position:absolute;inset:0;pointer-events:none;overflow:hidden;opacity:.22}
+.holo-scan:before{content:"";position:absolute;left:0;right:0;top:-3px;height:2px;background:linear-gradient(90deg,transparent,rgba(53,200,255,.9),transparent);box-shadow:0 0 15px rgba(53,200,255,.55);animation:scanDown 5s linear infinite}
+@keyframes scanDown{to{top:100%}}
+</style>
+
+<style id="dna-barcode-enhancements">
+.dna-barcode-visualizer,.how-it-works{margin:34px 0;padding:28px;border:1px solid rgba(90,220,255,.18);border-radius:20px;background:linear-gradient(145deg,rgba(7,18,30,.94),rgba(4,10,18,.96));box-shadow:0 18px 55px rgba(0,0,0,.28)}
+.section-heading{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;margin-bottom:22px}
+.eyebrow,.panel-label{font-size:10px;letter-spacing:.2em;color:#66dcff;font-weight:700}
+.section-heading h2{margin:6px 0 5px;font-size:25px}
+.section-heading p{margin:0;color:#8fa5b8;font-size:13px;max-width:680px;line-height:1.6}
+.barcode-status{font-size:10px;letter-spacing:.15em;padding:8px 12px;border:1px solid rgba(102,220,255,.35);border-radius:999px;color:#66dcff}
+.barcode-grid{display:grid;grid-template-columns:1.2fr 1fr;gap:16px}
+.barcode-panel{padding:20px;border-radius:15px;background:rgba(10,25,39,.72);border:1px solid rgba(255,255,255,.07)}
+.barcode-visual{grid-column:1/-1}
+.barcode-sequence{margin-top:13px;padding:15px;min-height:54px;border-radius:10px;background:#030a11;color:#8ef4ff;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;line-height:1.8;word-break:break-all;letter-spacing:.06em}
+.barcode-meta{display:flex;gap:25px;margin-top:10px;color:#71899c;font-size:11px}
+.base-row{display:grid;grid-template-columns:20px 1fr 35px;gap:10px;align-items:center;margin:14px 0;color:#c9d8e4;font:12px ui-monospace,monospace}
+.base-track{height:8px;background:#07121c;border-radius:20px;overflow:hidden}
+.base-track i{display:block;height:100%;width:0;border-radius:20px;background:linear-gradient(90deg,#3cc9ff,#8cf7d8);transition:width .5s ease}
+.base-row b{text-align:right;color:#8ea7ba;font-weight:500}
+.barcode-strip{display:grid;grid-template-columns:repeat(48,minmax(3px,1fr));gap:2px;min-height:120px;align-items:end;padding:16px;background:#02080e;border-radius:12px;overflow:hidden}
+.barcode-bit{height:100%;min-height:22px;border-radius:1px;opacity:.9;box-shadow:0 0 8px rgba(90,220,255,.12)}
+.pattern-legend{display:flex;gap:18px;margin-top:10px;color:#738b9d;font:10px ui-monospace,monospace}
+.workflow-steps{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.workflow-step{padding:20px;border-radius:15px;background:rgba(10,25,39,.72);border:1px solid rgba(255,255,255,.07);min-height:150px}
+.step-number{font:700 11px ui-monospace,monospace;color:#66dcff;letter-spacing:.12em}
+.workflow-step h3{font-size:15px;margin:12px 0 8px}
+.workflow-step p{font-size:12px;line-height:1.7;color:#8fa5b8;margin:0}
+@media(max-width:800px){.barcode-grid,.workflow-steps{grid-template-columns:1fr}.barcode-visual{grid-column:auto}.section-heading{flex-direction:column}}
+</style>
+
+</head>
+<body>
+<header><div class="logo">BioScan <span>3D</span></div><div class="tag">Explore life. Decode DNA.</div></header>
+<div class="layout">
+<aside>
+  <div class="nav active">⌂ <span>Dashboard</span></div>
+  <div class="nav">🧬 <span>DNA Scanner</span></div>
+  <div class="nav">⚖ <span>Compare Species</span></div>
+  <div class="nav">ℹ <span>About</span></div>
+  <h3>Featured Species</h3>
+  <div id="speciesList"></div>
+</aside>
+<main>
+  <div class="topbar">
+    <div class="search"><input id="search" placeholder="Search tiger, butterfly, human or panda…"><button onclick="searchSpecies()">Scan</button></div>
+    <button onclick="runScan()">⚡ Scan DNA</button><button onclick="toggleAuto()">⟳ Auto Rotate</button>
+  </div>
+
+  <section class="hero">
+    <div class="card viewer">
+      <canvas id="scene"></canvas><div class="holo-scan"></div>
+      <div class="hud">🖱 Drag to rotate<br>↕ Scroll to zoom<br>💡 Hologram mode</div>
+      <div class="controls"><button onclick="resetView()">⟳</button><button onclick="zoom(1.15)">＋</button><button onclick="zoom(.87)">−</button></div>
+      <div class="viewerTitle"><strong id="viewerName">TIGER</strong><small id="viewerLatin">PANTHERA TIGRIS</small></div>
+    </div>
+    <div class="card info">
+      <h1 id="name">Tiger</h1><div class="latin" id="latin">Panthera tigris</div><span class="badge">● Species selected</span>
+      <div class="rule"></div><div id="taxonomy"></div>
+      <div class="rule"></div><h3 style="margin:0 0 8px">Project note</h3>
+      <p style="color:#91a8c2;font-size:13px;line-height:1.6">The 3D specimen uses mesh-based anatomical silhouettes with restrained holographic rendering. DNA values shown in this demo are for interface/algorithm demonstration and should be replaced with verified barcode records for scientific use.</p>
+    </div>
+  </section>
+
+  <section class="grid">
+    <div class="card panel"><h2>🧬 DNA Barcode <span>Sequence</span></h2><div class="sequence" id="sequence"></div><div class="stats"><div class="stat"><small>Length</small><b id="length">0 bp</b></div><div class="stat"><small>GC Content</small><b id="gc">0%</b></div></div></div>
+    <div class="card panel"><h2>📊 Sequence <span>Analysis</span></h2><div class="legend" id="legend"></div></div>
+    <div class="card panel"><h2>🌀 DNA <span>Visualization</span></h2><canvas id="dnaCanvas" height="225" style="width:100%;background:#020914;border-radius:10px"></canvas></div>
+    </div></div></div><div style="margin-top:15px;color:#90a9c4;font-size:13px">Sequence comparison demo: <b id="similarity" style="color:#fff">—</b></div><div class="bar"><div class="fill" id="simBar" style="width:0%"></div></div></div>
+  </section>
+  <footer>BioScan 3D • Built with HTML, CSS, JavaScript and Three.js • GitHub-ready</footer>
+</main></div>
+
+<script>
+const species={
+ Tiger:{latin:"Panthera tigris",emoji:"🐅",color:0xff9f1c,group:"Mammalia",order:"Carnivora",family:"Felidae",genus:"Panthera",habitat:"Forests & grasslands",dna:"ATGCGTACGTTAGCTAGTCCGATCGTACGTAGCTAGCTAGGCTAACGTTAGCGATCGATCGTAGCTAGGCTACGATCGTACGATGCTAGCTACGGTAGCTAGCTAGGCTA"},
+ Butterfly:{latin:"Danaus plexippus",emoji:"🦋",color:0xff9f2d,group:"Insecta",order:"Lepidoptera",family:"Nymphalidae",genus:"Danaus",habitat:"Meadows, gardens & forests",dna:"ATGCGTACGTTAGCTAGTCCGATCGTACGTAGCTAGCTAGGCTAACGTTAGCGATCGATCGTAGCTAGGCTACGATCGTACGATGCTAGCTACGGTAGATAGCTAGCTAGCAA"},
+ Human:{latin:"Homo sapiens",emoji:"🧑",color:0x55b7ff,group:"Mammalia",order:"Primates",family:"Hominidae",genus:"Homo",habitat:"Global",dna:"ATGCGTACGTTAGCTAGTCCGATCGTACGTAGCTAGCTAGGCTAACGTTAGCGATCGATCGTAGCTAGGCTACGATCGTACGATGCTAGCTACGATAGCTAGCTAGCTA"},
+ Panda:{latin:"Ailuropoda melanoleuca",emoji:"🐼",color:0xbfd7ff,group:"Mammalia",order:"Carnivora",family:"Ursidae",genus:"Ailuropoda",habitat:"Mountain bamboo forests",dna:"ATGCGTACGTTAGCTAGTCCGATCGTACGTAGCTAGCTAGGCTAACGTTAGCGATCGATCGTAGCTAGGCTACGATCGTACGATGCTAGCTACGGTAGATAGCTAGCTAGCAA"}
+};
+let current="Tiger",auto=true,drag=false,lastX=0,lastY=0;
+const canvas=document.getElementById("scene"), renderer=new THREE.WebGLRenderer({canvas,alpha:true,antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+const scene=new THREE.Scene(), camera=new THREE.PerspectiveCamera(42,1,.1,100);
+camera.position.set(0,1.2,7);
+scene.add(new THREE.AmbientLight(0x79bfff,1.8));
+const key=new THREE.PointLight(0x38bfff,18,18);key.position.set(3,4,4);scene.add(key);
+const group=new THREE.Group();scene.add(group);
+const rings=[];
+for(let r=1.7;r<=2.5;r+=.4){let g=new THREE.TorusGeometry(r,.008,8,96);let m=new THREE.MeshBasicMaterial({color:0x2bbcff,transparent:true,opacity:.42});let o=new THREE.Mesh(g,m);o.rotation.x=Math.PI/2;group.add(o);rings.push(o)}
+const grid=new THREE.GridHelper(7,28,0x1b75b8,0x0a3159);grid.position.y=-1.55;grid.material.transparent=true;grid.material.opacity=.28;scene.add(grid);
+const particleGeo=new THREE.BufferGeometry(), particleCount=260, positions=[];
+for(let i=0;i<particleCount;i++){
+  const a=Math.random()*Math.PI*2, r=2+Math.random()*2.2;
+  positions.push(Math.cos(a)*r,(Math.random()*3.5)-1.2,Math.sin(a)*r);
+}
+particleGeo.setAttribute("position",new THREE.Float32BufferAttribute(positions,3));
+const particles=new THREE.Points(particleGeo,new THREE.PointsMaterial({color:0x55cfff,size:.025,transparent:true,opacity:.72}));
+scene.add(particles);
+
+function mat(c){
+ return new THREE.MeshStandardMaterial({
+   color:c,transparent:true,opacity:.72,
+   emissive:c,emissiveIntensity:.72,
+   metalness:.35,roughness:.32
+ });
+}
+function sphere(x,y,z,s,c){
+ let o=new THREE.Mesh(new THREE.SphereGeometry(s,32,24),mat(c));
+ o.position.set(x,y,z);group.add(o);
+ let glow=new THREE.Mesh(
+   new THREE.SphereGeometry(s*1.025,24,18),
+   new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:.12,side:THREE.BackSide})
+ );
+ glow.position.copy(o.position);group.add(glow);return o;
+}
+function cyl(x,y,z,rad,h,c,rot=[0,0,0]){let o=new THREE.Mesh(new THREE.CylinderGeometry(rad,rad*1.08,h,18),mat(c));o.position.set(x,y,z);o.rotation.set(...rot);group.add(o);return o}
+function makeSpecimen(type){
+  const group=new THREE.Group();
+  const c = type==="Tiger" ? 0x7feeff : type==="Panda" ? 0x8eeeff : type==="Human" ? 0x73dcff : 0x9dfcff;
+  const mat = new THREE.MeshPhysicalMaterial({
+    color:c, transparent:true, opacity:.46, emissive:c, emissiveIntensity:.72,
+    metalness:.15, roughness:.38, clearcoat:.42, clearcoatRoughness:.24,
+    transmission:.04, depthWrite:false
+  });
+  const dark = new THREE.MeshPhysicalMaterial({
+    color:0x16313e, transparent:true, opacity:.62, emissive:0x0c5965,
+    emissiveIntensity:.55, roughness:.42, depthWrite:false
+  });
+
+  function ell(x,y,z,sx,sy,sz,m=mat){
+    const q=new THREE.Mesh(new THREE.SphereGeometry(1,48,32),m);
+    q.position.set(x,y,z); q.scale.set(sx,sy,sz); group.add(q); return q;
+  }
+  function tube(points,r,m=mat){
+    const curve=new THREE.CatmullRomCurve3(points);
+    const q=new THREE.Mesh(new THREE.TubeGeometry(curve,48,r,20,false),m);
+    group.add(q); return q;
+  }
+
+  if(type==="Human"){
+    // Proportional human anatomical silhouette; smooth meshes rather than stacked primitives.
+    ell(0,1.10,0,.62,1.00,.34);
+    ell(0,.10,0,.46,.50,.28);
+    ell(0,2.00,0,.29,.34,.27);
+    tube([new THREE.Vector3(0,1.62,0),new THREE.Vector3(0,1.82,0)],.15);
+    tube([new THREE.Vector3(-.46,1.45,0),new THREE.Vector3(-.78,.72,0),new THREE.Vector3(-.82,.04,0)],.12);
+    tube([new THREE.Vector3(.46,1.45,0),new THREE.Vector3(.78,.72,0),new THREE.Vector3(.82,.04,0)],.12);
+    tube([new THREE.Vector3(-.28,.0,0),new THREE.Vector3(-.38,-.95,0),new THREE.Vector3(-.40,-1.86,.02)],.15);
+    tube([new THREE.Vector3(.28,.0,0),new THREE.Vector3(.38,-.95,0),new THREE.Vector3(.40,-1.86,.02)],.15);
+    ell(-.41,-1.96,.10,.20,.09,.36);
+    ell(.41,-1.96,.10,.20,.09,.36);
+  } else if(type==="Butterfly"){
+    // Four curved wing meshes with a segmented thorax/abdomen and antennae.
+    const wm=new THREE.MeshPhysicalMaterial({
+      color:c,transparent:true,opacity:.30,emissive:c,emissiveIntensity:.75,
+      side:THREE.DoubleSide, roughness:.30, transmission:.08, depthWrite:false
+    });
+    function wing(points, z, rot){
+      const s=new THREE.Shape();
+      s.moveTo(points[0][0],points[0][1]);
+      for(let i=1;i<points.length;i++) s.lineTo(points[i][0],points[i][1]);
+      s.closePath();
+      const geo=new THREE.ExtrudeGeometry(s,{depth:.045,bevelEnabled:true,bevelSegments:3,bevelSize:.018,bevelThickness:.012});
+      const q=new THREE.Mesh(geo,wm); q.position.z=z; q.rotation.x=rot; group.add(q);
+    }
+    wing([[0,0],[-.72,.30],[-1.18,.92],[-1.30,1.58],[-.90,1.78],[-.42,1.48],[-.10,.68]],.10,0);
+    wing([[0,0],[.72,.30],[1.18,.92],[1.30,1.58],[.90,1.78],[.42,1.48],[.10,.68]],.10,0);
+    wing([[0,0],[-.70,-.10],[-1.05,-.62],[-.76,-.90],[-.28,-.55]],-.10,0);
+    wing([[0,0],[.70,-.10],[1.05,-.62],[.76,-.90],[.28,-.55]],-.10,0);
+    tube([new THREE.Vector3(0,.72,0),new THREE.Vector3(0,.05,0),new THREE.Vector3(0,-.55,0)],.10,dark);
+    ell(0,.84,0,.15,.15,.14,dark);
+    tube([new THREE.Vector3(-.05,.93,0),new THREE.Vector3(-.22,1.18,.02),new THREE.Vector3(-.43,1.32,.03)],.014,dark);
+    tube([new THREE.Vector3(.05,.93,0),new THREE.Vector3(.22,1.18,.02),new THREE.Vector3(.43,1.32,.03)],.014,dark);
+  } else if(type==="Tiger"){
+    // Quadruped tiger silhouette with connected anatomy and curved tail.
+    ell(0,.28,0,1.30,.66,.46);
+    ell(-.88,.42,0,.54,.68,.42);
+    ell(.95,.43,0,.55,.57,.39);
+    ell(1.25,.88,0,.48,.43,.36);
+    ell(1.58,.77,0,.32,.25,.25);
+    ell(1.17,1.28,.02,.14,.19,.11,dark);
+    ell(1.48,1.28,.02,.14,.19,.11,dark);
+    tube([new THREE.Vector3(-.90,.10,.28),new THREE.Vector3(-1.08,-.48,.28),new THREE.Vector3(-1.05,-1.08,.28)],.18);
+    tube([new THREE.Vector3(-.42,-.18,.30),new THREE.Vector3(-.52,-.82,.30),new THREE.Vector3(-.50,-1.25,.30)],.16);
+    tube([new THREE.Vector3(.50,-.16,.28),new THREE.Vector3(.42,-.80,.28),new THREE.Vector3(.46,-1.23,.28)],.17);
+    tube([new THREE.Vector3(.94,.12,.02),new THREE.Vector3(1.40,-.20,.02),new THREE.Vector3(1.78,-.65,.02),new THREE.Vector3(1.90,-1.08,.02)],.105);
+    // Subtle stripe ridges.
+    for(let i=0;i<7;i++){
+      const x=-.72+i*.27;
+      tube([new THREE.Vector3(x,.66,.42),new THREE.Vector3(x-.08,.30,.43),new THREE.Vector3(x-.02,.05,.41)],.018,dark);
+    }
+  } else { // Panda
+    ell(0,.22,0,1.18,.76,.56);
+    ell(.72,.56,0,.60,.62,.47);
+    ell(1.16,1.02,0,.50,.49,.41);
+    ell(1.00,1.45,.02,.16,.18,.12,dark);
+    ell(1.38,1.45,.02,.16,.18,.12,dark);
+    ell(1.52,.98,-.30,.13,.21,.09,dark);
+    ell(1.52,.98,.30,.13,.21,.09,dark);
+    tube([new THREE.Vector3(-.78,.02,.36),new THREE.Vector3(-1.10,-.52,.36),new THREE.Vector3(-.98,-1.03,.36)],.20,dark);
+    tube([new THREE.Vector3(.43,-.20,.38),new THREE.Vector3(.34,-.78,.38),new THREE.Vector3(.38,-1.15,.38)],.20,dark);
+    tube([new THREE.Vector3(.43,-.20,-.38),new THREE.Vector3(.34,-.78,-.38),new THREE.Vector3(.38,-1.15,-.38)],.20,dark);
+  }
+
+  const glow=new THREE.Mesh(new THREE.SphereGeometry(1.02,48,32),
+    new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:.08,blending:THREE.AdditiveBlending,depthWrite:false}));
+  glow.scale.set(type==="Butterfly"?1.55:1.62,type==="Human"?2.15:.82,type==="Butterfly"?1.05:.62);
+  group.add(glow);
+  return group;
+}
+function resize(){const w=canvas.clientWidth,h=canvas.clientHeight;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix()}
+window.addEventListener("resize",resize);resize();
+canvas.addEventListener("pointerdown",e=>{drag=true;lastX=e.clientX;lastY=e.clientY});
+window.addEventListener("pointerup",()=>drag=false);
+window.addEventListener("pointermove",e=>{if(!drag)return;group.rotation.y+=(e.clientX-lastX)*.008;group.rotation.x+=(e.clientY-lastY)*.004;lastX=e.clientX;lastY=e.clientY});
+canvas.addEventListener("wheel",e=>{e.preventDefault();camera.position.z=Math.max(4,Math.min(10,camera.position.z+e.deltaY*.004))},{passive:false});
+function zoom(n){camera.position.z=Math.max(4,Math.min(10,camera.position.z/n))}
+function resetView(){group.rotation.set(0,0,0);camera.position.z=7}
+function toggleAuto(){auto=!auto}
+function runScan(){
+ const btn=document.querySelector('.topbar button');
+ const old=btn.textContent;
+ btn.textContent='◌ Scanning...';
+ btn.disabled=true;
+ document.querySelector('.viewerTitle strong').style.opacity='.25';
+ setTimeout(()=>{
+   document.querySelector('.viewerTitle strong').style.opacity='1';
+   btn.textContent='✓ Identified';
+   setTimeout(()=>{btn.textContent=old;btn.disabled=false},900);
+ },1400);
+}
+function animate(){
+ requestAnimationFrame(animate);
+ if(auto&&!drag)group.rotation.y+=.004;
+ rings.forEach((r,i)=>{r.rotation.z+=.0015*(i+1);r.material.opacity=.28+.14*Math.sin(Date.now()*.002+i)});
+ particles.rotation.y+=.00035;
+ renderer.render(scene,camera)
+}animate();
+
+function calc(seq){let n=seq.length,g=0,c=0,a=0,t=0;for(const x of seq){if(x==="G")g++;if(x==="C")c++;if(x==="A")a++;if(x==="T")t++}return {n,g,c,a,t,gc:((g+c)/n*100).toFixed(1)}}
+function renderDNA(seq){
+ const c=document.getElementById("dnaCanvas"),ctx=c.getContext("2d"),w=c.width=c.clientWidth*devicePixelRatio,h=c.height=225*devicePixelRatio;ctx.scale(devicePixelRatio,devicePixelRatio);
+ const W=c.clientWidth,H=225;ctx.clearRect(0,0,W,H);ctx.lineWidth=2;
+ const colors={A:"#35e0a1",T:"#ffb347",G:"#35c8ff",C:"#c875ff"};
+ for(let i=0;i<seq.length;i+=3){let x=10+i/seq.length*(W-20),y=H/2+Math.sin(i*.45)*65;ctx.strokeStyle="rgba(80,180,255,.18)";ctx.beginPath();ctx.moveTo(x,y-65);ctx.lineTo(x,y+65);ctx.stroke();for(const [j,b] of [[0,seq[i]],[1,seq[i+1]||"A"]]){let yy=y+(j?65:-65);ctx.fillStyle=colors[b];ctx.beginPath();ctx.arc(x,yy,4,0,Math.PI*2);ctx.fill()}}
+ for(let p=0;p<2;p++){ctx.beginPath();for(let x=0;x<W;x+=3){let y=H/2+Math.sin(x*.045)*65*(p?1:-1);p?ctx.lineTo(x,y):ctx.lineTo(x,y)}ctx.strokeStyle="rgba(65,193,255,.8)";ctx.stroke()}
+}
+function updateUI(){
+ const d=species[current],s=calc(d.dna);
+ document.getElementById("name").textContent=current;document.getElementById("latin").textContent=d.latin;
+ document.getElementById("viewerName").textContent=current.toUpperCase();document.getElementById("viewerLatin").textContent=d.latin.toUpperCase();
+ document.getElementById("sequence").textContent=d.dna.match(/.{1,10}/g).map((x,i)=>String(i*10+1).padStart(4," ")+"  "+x).join("\n");
+ document.getElementById("length").textContent=s.n+" bp";document.getElementById("gc").textContent=s.gc+"%";
+ document.getElementById("taxonomy").innerHTML=[["Kingdom","Animalia"],["Phylum","Chordata"],["Class",d.group],["Order",d.order],["Family",d.family],["Genus",d.genus],["Species",d.latin]].map(x=>`<div class="infoRow"><span>${x[0]}</span><span>${x[1]}</span></div>`).join("");
+ document.getElementById("legend").innerHTML=[["A",s.a,"#35e0a1"],["T",s.t,"#ffb347"],["G",s.g,"#35c8ff"],["C",s.c,"#c875ff"]].map(x=>`<div><i class="dot" style="background:${x[2]}"></i><span>${x[0]} — ${((x[1]/s.n)*100).toFixed(1)}%</span><b>${x[1]}</b></div>`).join("");
+ document.getElementById("compareA").textContent=current;makeSpecimen(current);renderDNA(d.dna);updateComparison();
+ document.querySelectorAll(".species").forEach(x=>x.classList.toggle("active",x.dataset.name===current));
+}
+function updateComparison(){
+ const other=document.getElementById("compareB").value,a=species[current].dna,b=species[other].dna;
+ let same=0,len=Math.max(a.length,b.length);for(let i=0;i<len;i++)if(a[i]===b[i])same++;
+ let sim=(same/len*100).toFixed(1);document.getElementById("similarity").textContent=sim+"% (demo sequence comparison)";
+ document.getElementById("simBar").style.width=sim+"%";document.getElementById("compareText").textContent=species[other].latin;
+}
+function searchSpecies(){let q=document.getElementById("search").value.trim().toLowerCase();let found=Object.keys(species).find(x=>x.toLowerCase()===q)||Object.keys(species).find(x=>species[x].latin.toLowerCase().includes(q));if(found){current=found;updateUI()}else alert("Try Tiger, Butterfly, Human or Panda.");}
+const list=document.getElementById("speciesList");Object.keys(species).forEach(n=>{const d=species[n],el=document.createElement("div");el.className="species";el.dataset.name=n;el.innerHTML=`<div class="thumb">${d.emoji}</div><div><b>${n}</b><small>${d.latin}</small></div>`;el.onclick=()=>{current=n;updateUI()};list.appendChild(el)});
+document.getElementById("search").addEventListener("keydown",e=>{if(e.key==="Enter")searchSpecies()});
+updateUI();
+</script>
+
+<section class="dna-barcode-visualizer" id="dna-barcode-visualizer">
+  <div class="section-heading">
+    <div>
+      <div class="eyebrow">CORE IDENTIFICATION LAYER</div>
+      <h2>DNA Barcode Visualizer</h2>
+      <p>Explore the barcode sequence, base composition, and positional pattern used for species identification.</p>
+    </div>
+    <div class="barcode-status" id="barcodeStatus">READY</div>
+  </div>
+
+  <div class="barcode-grid">
+    <div class="barcode-panel">
+      <div class="panel-label">BARCODE SEQUENCE</div>
+      <div class="barcode-sequence" id="barcodeSequence">
+        ATGCGTACGTTAGCTAGGCTACGTAGCTAGCTAGGCTAACGTTAGC
+      </div>
+      <div class="barcode-meta">
+        <span id="barcodeLength">Length: 48 bp</span>
+        <span id="gcRatio">GC ratio: 50%</span>
+      </div>
+    </div>
+
+    <div class="barcode-panel">
+      <div class="panel-label">BASE COMPOSITION</div>
+      <div class="base-bars">
+        <div class="base-row"><span>A</span><div class="base-track"><i id="barA"></i></div><b id="countA">0</b></div>
+        <div class="base-row"><span>T</span><div class="base-track"><i id="barT"></i></div><b id="countT">0</b></div>
+        <div class="base-row"><span>G</span><div class="base-track"><i id="barG"></i></div><b id="countG">0</b></div>
+        <div class="base-row"><span>C</span><div class="base-track"><i id="barC"></i></div><b id="countC">0</b></div>
+      </div>
+    </div>
+
+    <div class="barcode-panel barcode-visual">
+      <div class="panel-label">BARCODE PATTERN</div>
+      <div class="barcode-strip" id="barcodeStrip" aria-label="DNA barcode pattern"></div>
+      <div class="pattern-legend">
+        <span>A</span><span>T</span><span>G</span><span>C</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="how-it-works" id="how-it-works">
+  <div class="section-heading">
+    <div>
+      <div class="eyebrow">WORKFLOW</div>
+      <h2>How BioScan Works</h2>
+      <p>From biological sample to a visual DNA barcode used for identification.</p>
+    </div>
+  </div>
+
+  <div class="workflow-steps">
+    <article class="workflow-step">
+      <div class="step-number">01</div>
+      <h3>Collect a sample</h3>
+      <p>Obtain biological material from the specimen, such as tissue, hair, or another suitable source.</p>
+    </article>
+    <article class="workflow-step">
+      <div class="step-number">02</div>
+      <h3>Extract DNA</h3>
+      <p>DNA is isolated from the sample so a target barcode region can be examined.</p>
+    </article>
+    <article class="workflow-step">
+      <div class="step-number">03</div>
+      <h3>Sequence the barcode</h3>
+      <p>The selected DNA barcode region is sequenced to produce a string of A, T, G, and C bases.</p>
+    </article>
+    <article class="workflow-step">
+      <div class="step-number">04</div>
+      <h3>Analyze the sequence</h3>
+      <p>The sequence is checked for length, base composition, and other identifying patterns.</p>
+    </article>
+    <article class="workflow-step">
+      <div class="step-number">05</div>
+      <h3>Compare with references</h3>
+      <p>The barcode can be compared with validated reference sequences to support species identification.</p>
+    </article>
+    <article class="workflow-step">
+      <div class="step-number">06</div>
+      <h3>Visualize the result</h3>
+      <p>BioScan turns the sequence into an interactive barcode and 3D holographic specimen view.</p>
+    </article>
+  </div>
+</section>
+
+
+<script>
+(function(){
+  const seqEl=document.getElementById('barcodeSequence');
+  const strip=document.getElementById('barcodeStrip');
+  if(!seqEl || !strip) return;
+  const seq=(seqEl.textContent||'').replace(/[^ATGC]/gi,'').toUpperCase();
+  seqEl.textContent=seq;
+  const counts={A:0,T:0,G:0,C:0};
+  seq.split('').forEach(b=>{if(counts[b]!==undefined) counts[b]++;});
+  const total=seq.length||1;
+  ['A','T','G','C'].forEach(b=>{
+    const c=document.getElementById('count'+b), bar=document.getElementById('bar'+b);
+    if(c)c.textContent=counts[b];
+    if(bar)bar.style.width=(counts[b]/total*100)+'%';
+  });
+  const len=document.getElementById('barcodeLength');
+  const gc=document.getElementById('gcRatio');
+  if(len)len.textContent='Length: '+seq.length+' bp';
+  if(gc)gc.textContent='GC ratio: '+Math.round((counts.G+counts.C)/total*100)+'%';
+  const status=document.getElementById('barcodeStatus');
+  if(status)status.textContent=seq.length?'SEQUENCE LOADED':'NO SEQUENCE';
+  const heights={A:38,T:62,G:88,C:74};
+  seq.split('').forEach((b,i)=>{
+    const bit=document.createElement('span');
+    bit.className='barcode-bit';
+    bit.style.height=(heights[b] + ((i*17)%28))+'%';
+    bit.style.background='linear-gradient(to top,rgba(71,211,255,.25),rgba(128,250,213,.95))';
+    bit.title=(i+1)+': '+b;
+    strip.appendChild(bit);
+  });
+})();
+</script>
+
+</body>
+</html>
